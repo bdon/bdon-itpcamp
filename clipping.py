@@ -3,7 +3,6 @@ import rasterio.mask
 import fiona
 from rasterio.windows import from_bounds
 from rasterio.warp import transform_bounds, transform_geom
-from shapely.validation import explain_validity
 from shapely.geometry import shape
 
 TIFF_URL = "https://naipeuwest.blob.core.windows.net/naip/v002/ny/2022/ny_060cm_2022/40073/m_4007317_sw_18_060_20220719.tif"
@@ -13,16 +12,19 @@ wgs_bounds = (-73.991339,40.678184,-73.986517,40.696261)
 
 
 with rasterio.open(TIFF_URL) as src:
-  # bounds = transform_bounds("EPSG:4326", src.crs, *wgs_bounds, densify_pts=21)
 
+  # open the source clipping path
   with fiona.open("prospectpark.geojson", "r") as shap:
     transformed_geom = transform_geom(
       src_crs=shap.crs,
       dst_crs=src.crs,
       geom=shap[0].geometry
     )
+
+    # transform it to the Shapely type
     poly = shape(transformed_geom)
-    print(explain_validity(poly))
+
+    # get the bounding box of the shape
     bounds = rasterio.features.bounds(transformed_geom)
     window = from_bounds(*bounds, transform=src.transform)
     transform = src.window_transform(window)
@@ -30,7 +32,7 @@ with rasterio.open(TIFF_URL) as src:
 
     data = src.read(window=window)
     with rasterio.open(
-          "out.tif", "w",
+          "clipping.tif", "w",
           driver="GTiff",
           height=data.shape[1],
           width=data.shape[2],

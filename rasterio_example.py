@@ -24,7 +24,7 @@ with rasterio.open(TIFF_URL) as src:
 
   # write the output GeoTIFF
   with rasterio.open(
-        "out.tif", "w",
+        "rasterio_example.tif", "w",
         driver="GTiff",
         height=data.shape[1],
         width=data.shape[2],

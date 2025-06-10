@@ -19,7 +19,7 @@ with rasterio.open(TIFF_URL) as src:
   transform = src.window_transform(window)
   data = src.read(window=window)
   with rasterio.open(
-        "out.tif", "w",
+        "read_across_source_edge.tif", "w",
         driver="GTiff",
         height=data.shape[1],
         width=data.shape[2],
