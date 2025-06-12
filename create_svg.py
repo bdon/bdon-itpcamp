@@ -16,7 +16,7 @@ TIFF_URL = "m_4007317_sw_18_060_20220719.tif"
 
 DPI = 600
 
-x_fudge = 2.5
+x_fudge = 5.5
 y_fudge = 0.5
 
 wgs_bounds = (-73.991339,40.678184,-73.986517,40.696261)
@@ -34,9 +34,7 @@ def linestring_to_svg_path(linestring):
 
 def rgb_to_grayscale_stretch_np(rgba: np.ndarray) -> np.ndarray:
   r, g, b, a = rgba
-  gray = (0.2989 * r + 0.5870 * g + 0.1140 * b).astype(r.dtype)
-  gray_min = gray.min()
-  gray_max = gray.max()
+  gray = ((0.2989 * r + 0.5870 * g + 0.1140 * b) / 4).astype(r.dtype)
   return np.stack([gray, a]) 
 
 with rasterio.open(TIFF_URL) as src:
@@ -53,7 +51,8 @@ with rasterio.open(TIFF_URL) as src:
     poly = shape(transformed_geom)
 
     # adjust this to account for the target "right keychain size"
-    scaling = Affine.scale(0.5, 0.5)
+    FACTOR = 0.3
+    scaling = Affine.scale(FACTOR, FACTOR)
 
     # get the bounding box of the shape
     bounds = rasterio.features.bounds(transformed_geom)
@@ -102,12 +101,12 @@ with rasterio.open(TIFF_URL) as src:
         "d": linestring_to_svg_path(xformed.exterior),
         "stroke": "red",
         "fill": "none",
-        "stroke-width": "0.001pt"
+        "stroke-width": "0.001 pt"
       })
 
       image = ET.SubElement(group, "image", {
-          "width": str(int(stretched.shape[2] / 2)),
-          "height": str(int(stretched.shape[1] / 2)),
+          "width": str(int(stretched.shape[2] * FACTOR)),
+          "height": str(int(stretched.shape[1] * FACTOR)),
           "{http://www.w3.org/1999/xlink}href": f"data:image/png;base64,{encoded_image}"
       })
 
