@@ -16,8 +16,8 @@ import xml.etree.ElementTree as ET
 TIFF_URL = "m_4007317_sw_18_060_20220719.tif"
 GEOJSON_PATH = "prospectpark.geojson"
 DPI = 600
-x_fudge = 10
-y_fudge = 0.2
+x_fudge = 5
+y_fudge = 4
 
 def format_coord(x):
     return f"{int(x)}" if x == int(x) else f"{x}"
@@ -72,6 +72,13 @@ denominator = nir + red
 ndvi = np.divide(numerator, denominator, out=np.zeros_like(numerator), where=denominator != 0)
 ndvi_scaled = ((ndvi + 1) / 2 * 255).astype(np.uint8)
 
+# Apply NDVI threshold
+threshold = 0.4  # Adjust as needed (range is -1 to 1)
+
+# Create mask where NDVI exceeds threshold
+ndvi_mask = ndvi > threshold
+
+
 # Create alpha mask based on transformed shape
 tmp_white2 = MemoryFile().open(
     width=out_width,
@@ -86,11 +93,20 @@ tmp_white2.write(np.full((out_height, out_width), 255, dtype=np.uint8), 1)
 
 alpha, _ = rasterio.mask.mask(tmp_white2, [transformed_geom], crop=True)
 
-# Create PNG with NDVI + alpha
+shapefile_mask = alpha[0] > 0  # Shape-based mask (from rasterio.mask)
+ndvi_mask = ndvi > threshold   # NDVI-based mask
+
+# Combine: only pixels that are both in the shapefile and above NDVI threshold
+combined_mask = shapefile_mask & ndvi_mask
+
+# Final bands
+grayscale_band = np.where(combined_mask, 255-32, 0).astype(np.uint8)
+alpha_band = np.where(combined_mask, 255, 0).astype(np.uint8)
+
 png = MemoryFile()
 with png.open(driver="PNG", width=out_width, height=out_height, count=2, dtype=np.uint8) as dst:
-    dst.write(ndvi_scaled, 1)
-    dst.write(alpha[0], 2)
+    dst.write(grayscale_band, 1)
+    dst.write(alpha_band, 2)
 
 encoded_image = base64.b64encode(png.read()).decode("utf-8")
 
