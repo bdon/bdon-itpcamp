@@ -78,11 +78,29 @@ data = raster.read(window=window, out_shape = (raster.count, int(window.height *
 
 # it is now the correct size
 
+# convert to NDVI
+r,g,b,i = data
+
+red = r.astype(np.float32)
+nir = i.astype(np.float32)
+numerator = nir - red
+denominator = nir + red
+ndvi = np.divide(numerator, denominator, out=np.zeros_like(numerator), where=denominator != 0)
+ndvi_scaled = ((ndvi + 1) / 2 * 255).astype(np.uint8)
+
+
+# tmp_white2 = MemoryFile().open(**p)
+# print(data.shape)
+# white_band2 = np.full((1,data.shape[1],data.shape[2]), 255, dtype='uint8')
+# tmp_white2.write(white_band2,1)
+# print(tmp_white2)
+
+out_image, out_transform = rasterio.mask.mask(tmp_white, [transformed_geom], crop=True)
 
 
 png = MemoryFile() 
-with png.open(driver="PNG",width=data.shape[2],height=data.shape[1],count=4,dtype=np.uint8) as dst:
-  dst.write(data)
+with png.open(driver="PNG",width=data.shape[2],height=data.shape[1],count=1,dtype=np.uint8) as dst:
+  dst.write(np.stack([ndvi_scaled]))
 
 encoded_image = base64.b64encode(png.read()).decode("utf-8")
 
@@ -102,8 +120,6 @@ group = ET.SubElement(svg, "g", {
   "transform": f"translate({x_fudge * DPI},{y_fudge * DPI})"
 })
 
-print("park shape")
-print(park_shape)
 xformed = affine_transform(transformed_geom, (~out_transform).to_shapely())
 xformed = affine_transform(xformed, Affine.scale(scale_factor).to_shapely())
 
