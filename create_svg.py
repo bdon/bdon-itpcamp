@@ -33,12 +33,6 @@ def linestring_to_svg_path(linestring):
     d.extend(f"L {format_coord(x)} {format_coord(y)}" for x, y in coords[1:])
     return " ".join(d)
 
-def rgb_to_grayscale_stretch_np(rgba: np.ndarray) -> np.ndarray:
-  r, g, b, a = rgba
-  gray = ((0.2989 * r + 0.5870 * g + 0.1140 * b) / 4).astype(r.dtype)
-  return np.stack([gray, a]) 
-
-
 raster = rasterio.open(TIFF_URL)
 park_shape = fiona.open("prospectpark.geojson", "r")
 
@@ -73,7 +67,6 @@ print("scale factor", scale_factor)
 
 # resize the raster to be:
 # 2 square inches at 600 DPI
-print(window)
 data = raster.read(window=window, out_shape = (raster.count, int(window.height * scale_factor), int(window.width * scale_factor)), resampling=Resampling.lanczos)
 
 # it is now the correct size
@@ -88,19 +81,28 @@ denominator = nir + red
 ndvi = np.divide(numerator, denominator, out=np.zeros_like(numerator), where=denominator != 0)
 ndvi_scaled = ((ndvi + 1) / 2 * 255).astype(np.uint8)
 
+tmp_white2 = MemoryFile().open(
+  width=data.shape[2],
+  height=data.shape[1],
+  driver="GTiff",
+  count=1,
+  dtype=np.uint8,
+  crs=p['crs'],
+  transform=p['transform']
+)
+print("tmp white2 profile", tmp_white2.profile)
+white_band2 = np.full((data.shape[1],data.shape[2]), 255, dtype='uint8')
+tmp_white2.write(white_band2,1)
 
-# tmp_white2 = MemoryFile().open(**p)
-# print(data.shape)
-# white_band2 = np.full((1,data.shape[1],data.shape[2]), 255, dtype='uint8')
-# tmp_white2.write(white_band2,1)
-# print(tmp_white2)
+xformed1 = affine_transform(transformed_geom, (~out_transform).to_shapely())
+xformed2 = affine_transform(xformed1, Affine.scale(scale_factor).to_shapely())
 
-out_image, out_transform = rasterio.mask.mask(tmp_white, [transformed_geom], crop=True)
-
+alpha, out_transform = rasterio.mask.mask(tmp_white2, [xformed1], crop=True)
+print(alpha.shape)
 
 png = MemoryFile() 
 with png.open(driver="PNG",width=data.shape[2],height=data.shape[1],count=1,dtype=np.uint8) as dst:
-  dst.write(np.stack([ndvi_scaled]))
+  dst.write(np.stack([ndvi_scaled, alpha]))
 
 encoded_image = base64.b64encode(png.read()).decode("utf-8")
 
@@ -120,10 +122,7 @@ group = ET.SubElement(svg, "g", {
   "transform": f"translate({x_fudge * DPI},{y_fudge * DPI})"
 })
 
-xformed = affine_transform(transformed_geom, (~out_transform).to_shapely())
-xformed = affine_transform(xformed, Affine.scale(scale_factor).to_shapely())
-
-cutline = buffer(xformed, 50)
+cutline = buffer(xformed2, 50)
 
 ET.SubElement(group, "path", {
     "d": linestring_to_svg_path(cutline.exterior),
@@ -145,6 +144,4 @@ ET.SubElement(group, "image", {
 
 tree = ET.ElementTree(svg)
 tree.write("output.svg", encoding="UTF-8", xml_declaration=True)
-
-# stretched = rgb_to_grayscale_stretch_np(out_image)
 
