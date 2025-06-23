@@ -12,11 +12,24 @@ from shapely import buffer
 import numpy as np
 import base64
 import xml.etree.ElementTree as ET
+from fontTools.ttLib import TTFont
+from fontTools.pens.svgPathPen import SVGPathPen
+
+TEXT = "PROSPECT PARK"
+FONT_PATH = "NationalPark-ExtraBold.otf"  # Replace with your .ttf path
+FONT_SIZE = 72  # points
+
+# Load font and get glyphs
+font = TTFont(FONT_PATH)
+glyph_set = font.getGlyphSet()
+units_per_em = font["head"].unitsPerEm
+scale = FONT_SIZE / units_per_em
+cmap = font.getBestCmap()
 
 TIFF_URL = "m_4007317_sw_18_060_20220719.tif"
 GEOJSON_PATH = "prospectpark.geojson"
 DPI = 600
-x_fudge = 5
+x_fudge = 7
 y_fudge = 4
 
 def format_coord(x):
@@ -140,7 +153,7 @@ ET.SubElement(group, "path", {
 # Add filled vector shape
 ET.SubElement(group, "path", {
     "d": linestring_to_svg_path(vector_pixels.exterior),
-    "fill": "black",
+    "fill": "#c0c0c0",
 })
 
 # Embed raster as PNG image
@@ -149,6 +162,36 @@ ET.SubElement(group, "image", {
     "height": str(out_height),
     "{http://www.w3.org/1999/xlink}href": f"data:image/png;base64,{encoded_image}"
 })
+
+labelgroup = ET.SubElement(group, "g", {
+    "transform": f"translate(80,540) scale(0.06,-0.06)"
+})
+
+x_cursor = 0
+hmtx = font["hmtx"]
+for char in TEXT:
+    if char == " ":
+        x_cursor += hmtx["space"][0]  # advanceWidth
+        continue
+    glyph_name = cmap.get(ord(char))
+    if not glyph_name:
+        continue
+    glyph = glyph_set[glyph_name]
+    pen = SVGPathPen(glyph_set)
+    glyph.draw(pen)
+    path_data = pen.getCommands()
+
+    # Add path to SVG
+    ET.SubElement(labelgroup, "path", {
+        "d": path_data,
+        "fill": "white",
+        "transform": f"translate({x_cursor},0)"
+    })
+
+    # Advance cursor
+    advance_width = hmtx[glyph_name][0]
+    x_cursor += advance_width
+
 
 # Write SVG to file
 tree = ET.ElementTree(svg)
